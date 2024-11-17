@@ -3,6 +3,7 @@ import joblib
 import numpy as np
 import pandas as pd
 import io
+import openpyxl  # Add this import
 
 # Cache the model loading so it only loads once
 @st.cache_resource
@@ -23,23 +24,27 @@ def predict_mining_class(features_batch, model, scaler, le):
     return predictions
 
 @st.cache_data
-def process_file(input_file, _model, _scaler, _le):  # Added underscores to model arguments
+def process_file(input_file, _model, _scaler, _le):
     # Read the uploaded file based on file extension
     file_extension = input_file.name.split('.')[-1].lower()
     
     if file_extension == 'csv':
         input_data = pd.read_csv(input_file)
     elif file_extension == 'xlsx':
-        input_data = pd.read_excel(input_file)
+        input_data = pd.read_excel(input_file, engine='openpyxl')
     else:
         raise ValueError("Unsupported file format. Please upload a CSV or XLSX file.")
     
-    # Rest of the function remains the same
+    # Convert columns to string first, then clean them
+    input_data.iloc[:, 0] = input_data.iloc[:, 0].astype(str)
+    input_data.iloc[:, 1] = input_data.iloc[:, 1].astype(str)
+    
+    # Clean and convert to numeric
     input_data.iloc[:, 0] = pd.to_numeric(input_data.iloc[:, 0].str.strip().str.replace(',', '.'), errors='coerce')
     input_data.iloc[:, 1] = pd.to_numeric(input_data.iloc[:, 1].str.strip().str.replace(',', '.'), errors='coerce')
     
     features = input_data.iloc[:, :2].values
-    predictions = predict_mining_class(features, _model, _scaler, _le)  # Updated argument names here too
+    predictions = predict_mining_class(features, _model, _scaler, _le)
     input_data['Predicted_Class'] = predictions
     
     return input_data
