@@ -46,8 +46,11 @@ def to_excel(df):
     output.seek(0)
     return output.read()
 
+# ... (previous imports and functions remain the same) ...
+
 def main():
     st.title('Mining Class Predictor')
+    st.write("Made by Rizky Azmi Swandy (rizkyswandy@gmail.com)")  # Added signature
     
     # Load the models
     try:
@@ -58,7 +61,7 @@ def main():
         return
 
     # File upload
-    st.write("Please upload your CSV file with two columns (feature1, feature2)")
+    st.write("Please upload your CSV file with only two columns with no headers(PLI, SPACE)")
     uploaded_file = st.file_uploader("Choose a CSV file", type=['csv'])
 
     if uploaded_file is not None:
