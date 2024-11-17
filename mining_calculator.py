@@ -53,9 +53,7 @@ def to_excel(df):
     return output.read()
 
 def main():
-    st.title('Mining Class Predictor')
-    st.markdown("<h4 style='text-align: right; color: grey;'>Made by Rizky Azmi Swandy (rizkyswandy@gmail.com)</h4>", unsafe_allow_html=True)
-    
+    st.title('Mining Class Predictor')    
     # Load the models
     try:
         model, scaler, le = load_models()
@@ -90,6 +88,12 @@ def main():
         except Exception as e:
             st.error(f"Error processing file: {str(e)}")
             st.write("Please make sure your CSV file has the correct format with two columns.")
+    
+    # Add some vertical space before the credit line
+    st.markdown("<br>" * 5, unsafe_allow_html=True)
+    
+    # Add credit line at the bottom
+    st.markdown("<h4 style='text-align: right; color: grey;'>Made by Rizky Azmi Swandy (rizkyswandy@gmail.com)</h4>", unsafe_allow_html=True)
 
 if __name__ == "__main__":
     main()
