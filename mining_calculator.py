@@ -4,6 +4,8 @@ import numpy as np
 import pandas as pd
 import io
 
+# Cache the model loading so it only loads once
+@st.cache_resource
 def load_models():
     loaded_model = joblib.load('xgboost_mining_model.joblib')
     loaded_scaler = joblib.load('scaler.joblib')
@@ -13,32 +15,32 @@ def load_models():
 def clean_numeric(x):
     return float(str(x).strip().replace(',', '.'))
 
-def predict_mining_class(feature1, feature2, model, scaler, le):
-    features = np.array([[feature1, feature2]])
-    features_scaled = scaler.transform(features)
-    prediction_encoded = model.predict(features_scaled)
-    prediction = le.inverse_transform(prediction_encoded)
-    return prediction[0]
+def predict_mining_class(features_batch, model, scaler, le):
+    # Batch processing instead of row by row
+    features_scaled = scaler.transform(features_batch)
+    predictions_encoded = model.predict(features_scaled)
+    predictions = le.inverse_transform(predictions_encoded)
+    return predictions
 
+@st.cache_data
 def process_file(input_file, model, scaler, le):
     # Read the uploaded file
     input_data = pd.read_csv(input_file)
     
-    # Clean the numeric columns
-    input_data.iloc[:, 0] = input_data.iloc[:, 0].apply(clean_numeric)
-    input_data.iloc[:, 1] = input_data.iloc[:, 1].apply(clean_numeric)
+    # Vectorized operations instead of apply
+    input_data.iloc[:, 0] = pd.to_numeric(input_data.iloc[:, 0].str.strip().str.replace(',', '.'), errors='coerce')
+    input_data.iloc[:, 1] = pd.to_numeric(input_data.iloc[:, 1].str.strip().str.replace(',', '.'), errors='coerce')
     
-    # Make predictions
-    predictions = []
-    for index, row in input_data.iterrows():
-        result = predict_mining_class(row.iloc[0], row.iloc[1], model, scaler, le)
-        predictions.append(result)
+    # Batch prediction instead of row-by-row
+    features = input_data.iloc[:, :2].values
+    predictions = predict_mining_class(features, model, scaler, le)
     
     # Add predictions column
     input_data['Predicted_Class'] = predictions
     
     return input_data
 
+@st.cache_data
 def to_excel(df):
     output = io.BytesIO()
     with pd.ExcelWriter(output, engine='xlsxwriter') as writer:
@@ -46,11 +48,9 @@ def to_excel(df):
     output.seek(0)
     return output.read()
 
-# ... (previous imports and functions remain the same) ...
-
 def main():
     st.title('Mining Class Predictor')
-    st.write("Made by Rizky Azmi Swandy (rizkyswandy@gmail.com)")  # Added signature
+    st.markdown("<h4 style='text-align: right; color: grey;'>Made by Rizky Azmi Swandy (rizkyswandy@gmail.com)</h4>", unsafe_allow_html=True)
     
     # Load the models
     try:
@@ -66,8 +66,9 @@ def main():
 
     if uploaded_file is not None:
         try:
-            # Process the file
-            results = process_file(uploaded_file, model, scaler, le)
+            # Add a spinner during processing
+            with st.spinner('Processing your file...'):
+                results = process_file(uploaded_file, model, scaler, le)
             
             # Show preview of results
             st.write("Preview of processed data:")
