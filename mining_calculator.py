@@ -23,7 +23,7 @@ def predict_mining_class(features_batch, model, scaler, le):
     return predictions
 
 @st.cache_data
-def process_file(input_file, model, scaler, le):
+def process_file(input_file, _model, _scaler, _le):  # Added underscores to model arguments
     # Read the uploaded file based on file extension
     file_extension = input_file.name.split('.')[-1].lower()
     
@@ -39,7 +39,7 @@ def process_file(input_file, model, scaler, le):
     input_data.iloc[:, 1] = pd.to_numeric(input_data.iloc[:, 1].str.strip().str.replace(',', '.'), errors='coerce')
     
     features = input_data.iloc[:, :2].values
-    predictions = predict_mining_class(features, model, scaler, le)
+    predictions = predict_mining_class(features, _model, _scaler, _le)  # Updated argument names here too
     input_data['Predicted_Class'] = predictions
     
     return input_data
