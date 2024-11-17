@@ -24,18 +24,22 @@ def predict_mining_class(features_batch, model, scaler, le):
 
 @st.cache_data
 def process_file(input_file, model, scaler, le):
-    # Read the uploaded file
-    input_data = pd.read_csv(input_file)
+    # Read the uploaded file based on file extension
+    file_extension = input_file.name.split('.')[-1].lower()
     
-    # Vectorized operations instead of apply
+    if file_extension == 'csv':
+        input_data = pd.read_csv(input_file)
+    elif file_extension == 'xlsx':
+        input_data = pd.read_excel(input_file)
+    else:
+        raise ValueError("Unsupported file format. Please upload a CSV or XLSX file.")
+    
+    # Rest of the function remains the same
     input_data.iloc[:, 0] = pd.to_numeric(input_data.iloc[:, 0].str.strip().str.replace(',', '.'), errors='coerce')
     input_data.iloc[:, 1] = pd.to_numeric(input_data.iloc[:, 1].str.strip().str.replace(',', '.'), errors='coerce')
     
-    # Batch prediction instead of row-by-row
     features = input_data.iloc[:, :2].values
     predictions = predict_mining_class(features, model, scaler, le)
-    
-    # Add predictions column
     input_data['Predicted_Class'] = predictions
     
     return input_data
@@ -61,8 +65,8 @@ def main():
         return
 
     # File upload
-    st.write("Please upload your CSV file with only two columns with no headers(PLI, SPACE)")
-    uploaded_file = st.file_uploader("Choose a CSV file", type=['csv'])
+    st.write("Please upload your CSV or XLSX file with only two columns with no headers(PLI, SPACE)")
+    uploaded_file = st.file_uploader("Choose a file", type=['csv', 'xlsx'])
 
     if uploaded_file is not None:
         try:
