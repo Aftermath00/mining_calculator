@@ -3,7 +3,12 @@ import joblib
 import numpy as np
 import pandas as pd
 import io
-import openpyxl  # Add this import
+import openpyxl
+import matplotlib.pyplot as plt
+import seaborn as sns
+
+# Set the style for plots
+plt.style.use('seaborn')
 
 # Cache the model loading so it only loads once
 @st.cache_resource
@@ -13,12 +18,63 @@ def load_models():
     loaded_le = joblib.load('label_encoder.joblib')
     return loaded_model, loaded_scaler, loaded_le
 
-def clean_numeric(x):
-    return float(str(x).strip().replace(',', '.'))
+def create_scatter_plot(df, sample_size=10):
+    """Create a scatter plot of PLI vs SPACE with classifications"""
+    # Sample random rows if dataset is larger than sample_size
+    if len(df) > sample_size:
+        plot_df = df.sample(n=sample_size, random_state=42)
+    else:
+        plot_df = df
+    
+    # Create the plot
+    fig, ax = plt.subplots(figsize=(10, 6))
+    
+    # Create scatter plot with different colors for each classification
+    for classification in plot_df['CLASSIFICATION'].unique():
+        mask = plot_df['CLASSIFICATION'] == classification
+        ax.scatter(
+            plot_df[mask]['PLI'], 
+            plot_df[mask]['SPACE'],
+            label=classification,
+            alpha=0.6
+        )
+    
+    plt.xlabel('PLI')
+    plt.ylabel('SPACE')
+    plt.title('PLI vs SPACE Classification (Random 10 Samples)')
+    plt.legend()
+    plt.grid(True, alpha=0.3)
+    
+    return fig
 
-def predict_mining_class(features_batch, model, scaler, le):
-    # Batch processing instead of row by row
-    features_scaled = scaler.transform(features_batch)
+def detect_headers(df):
+    """Check if the DataFrame has the expected headers (PLI, SPACE)"""
+    expected_headers = {'PLI', 'SPACE'}
+    if len(df.columns) >= 2:
+        first_row_headers = {str(col).strip().upper() for col in df.columns[:2]}
+        return bool(expected_headers & first_row_headers)
+    return False
+
+def clean_and_prepare_data(df):
+    """Clean and prepare the data, ensuring correct column names and types"""
+    # If df has more than 2 columns, keep only the first two
+    df = df.iloc[:, :2]
+    
+    # Convert columns to numeric, replacing commas with periods
+    for col in df.columns:
+        df[col] = df[col].astype(str).str.strip()
+        df[col] = pd.to_numeric(
+            df[col].str.replace(',', '.'), 
+            errors='coerce'
+        )
+    
+    # Rename columns to standard names
+    df.columns = ['PLI', 'SPACE']
+    return df
+
+def predict_mining_class(features_df, model, scaler, le):
+    """Make predictions using the loaded models"""
+    features_scaled = scaler.transform(features_df)
     predictions_encoded = model.predict(features_scaled)
     predictions = le.inverse_transform(predictions_encoded)
     return predictions
@@ -28,26 +84,36 @@ def process_file(input_file, _model, _scaler, _le):
     # Read the uploaded file based on file extension
     file_extension = input_file.name.split('.')[-1].lower()
     
-    if file_extension == 'csv':
-        input_data = pd.read_csv(input_file)
-    elif file_extension == 'xlsx':
-        input_data = pd.read_excel(input_file, engine='openpyxl')
-    else:
-        raise ValueError("Unsupported file format. Please upload a CSV or XLSX file.")
-    
-    # Convert columns to string first, then clean them
-    input_data.iloc[:, 0] = input_data.iloc[:, 0].astype(str)
-    input_data.iloc[:, 1] = input_data.iloc[:, 1].astype(str)
-    
-    # Clean and convert to numeric
-    input_data.iloc[:, 0] = pd.to_numeric(input_data.iloc[:, 0].str.strip().str.replace(',', '.'), errors='coerce')
-    input_data.iloc[:, 1] = pd.to_numeric(input_data.iloc[:, 1].str.strip().str.replace(',', '.'), errors='coerce')
-    
-    features = input_data.iloc[:, :2].values
-    predictions = predict_mining_class(features, _model, _scaler, _le)
-    input_data['Predicted_Class'] = predictions
-    
-    return input_data
+    try:
+        if file_extension == 'csv':
+            input_data = pd.read_csv(input_file)
+            if not detect_headers(input_data):
+                input_data = pd.read_csv(input_file, header=None)
+        elif file_extension == 'xlsx':
+            input_data = pd.read_excel(input_file, engine='openpyxl')
+            if not detect_headers(input_data):
+                input_data = pd.read_excel(input_file, header=None, engine='openpyxl')
+        else:
+            raise ValueError("Unsupported file format. Please upload a CSV or XLSX file.")
+        
+        # Clean and prepare the data
+        input_data = clean_and_prepare_data(input_data)
+        
+        # Make predictions
+        predictions = predict_mining_class(input_data, _model, _scaler, _le)
+        
+        # Create output DataFrame with standardized column names
+        output_data = pd.DataFrame({
+            'PLI': input_data['PLI'],
+            'SPACE': input_data['SPACE'],
+            'CLASSIFICATION': predictions
+        })
+        
+        return output_data
+        
+    except Exception as e:
+        st.error(f"Error processing file: {str(e)}")
+        raise e
 
 @st.cache_data
 def to_excel(df):
@@ -59,6 +125,7 @@ def to_excel(df):
 
 def main():
     st.title('Mining Class Predictor')    
+    
     # Load the models
     try:
         model, scaler, le = load_models()
@@ -68,7 +135,8 @@ def main():
         return
 
     # File upload
-    st.write("Please upload your CSV or XLSX file with only two columns with no headers(PLI, SPACE)")
+    st.write("Please upload your CSV or XLSX file. The file should contain two columns: PLI and SPACE")
+    st.write("If your file doesn't have headers, the first two columns will be used as PLI and SPACE respectively")
     uploaded_file = st.file_uploader("Choose a file", type=['csv', 'xlsx'])
 
     if uploaded_file is not None:
@@ -78,8 +146,18 @@ def main():
                 results = process_file(uploaded_file, model, scaler, le)
             
             # Show preview of results
-            st.write("Preview of processed data:")
+            st.write("Preview of first 5 rows:")
             st.dataframe(results.head())
+            
+            # Show random 10 samples
+            st.write("Random 10 samples:")
+            random_samples = results.sample(n=min(10, len(results)), random_state=42)
+            st.dataframe(random_samples)
+            
+            # Create and show visualization
+            st.write("Visualization of random samples:")
+            fig = create_scatter_plot(results)
+            st.pyplot(fig)
             
             # Create download button
             excel_data = to_excel(results)
@@ -92,7 +170,7 @@ def main():
             
         except Exception as e:
             st.error(f"Error processing file: {str(e)}")
-            st.write("Please make sure your CSV file has the correct format with two columns.")
+            st.write("Please make sure your file has the correct format with two columns.")
     
     # Add some vertical space before the credit line
     st.markdown("<br>" * 5, unsafe_allow_html=True)
